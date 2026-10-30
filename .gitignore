@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+*.tgz
+*.log
+.env
+.env.*
+*.key
+*.pem
+.DS_Store
+.vitest/
+.agentic-state/
+tx-journal.json
+
+._*
+__MACOSX/
