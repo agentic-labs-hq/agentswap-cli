@@ -147,7 +147,7 @@ export async function readProtocolSnapshot(sdk: Sdk, deployment: Deployment): Pr
     warnings.push(`Pool factory has pending governance ${pendingGovernance} (governance handover not accepted).`);
   }
   if (deployment.governance !== undefined && !sameAddress(governance, deployment.governance)) {
-    warnings.push(`Pool factory governance is ${governance}, not the branded Safe ${deployment.governance}.`);
+    warnings.push(`Pool factory governance is ${governance}, not the governance Safe from the address book ${deployment.governance}.`);
   }
 
   const allowedFees = await Promise.all(

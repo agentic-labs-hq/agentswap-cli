@@ -59,7 +59,10 @@ All commands accept `--json` (one JSON object on stdout). Use `agentswap <comman
      --recipient 0x... --metadata-uri ipfs://... --json
    ```
 
-3. Inspect `requestId`, `parsedTx`, `simulationResult`, `risks`, and `requireConfirmation`. Nothing has been sent. `requestId` is the preview binding; `orderId` is only a local journal key created after execute; `txHash` is the live chain/BAW lookup key.
+3. Inspect the nested preview. Nothing has been sent.
+   - Normal preview: `result.preview.requestId`, `result.preview.parsedTx`, `result.preview.simulationResult`, `result.preview.risks`, `result.preview.requireConfirmation`; next command is `result.preview.nextCommand` or `result.next.command`.
+   - Approval branch: `result.needsApproval[i].preview.requestId` and `result.needsApproval[i].nextCommand`; execute approvals, then re-run the original command.
+   - LP remove: `result.orderedSteps[i].requestId` (also `.preview.requestId`) and `result.orderedSteps[i].nextCommand`; `requiresSequentialExecution` means run in order. `result.next.recoveryAfterDecrease` is only for after the decrease confirms.
 4. Execute only after the user explicitly approves that preview:
 
    ```sh
@@ -75,7 +78,23 @@ All commands accept `--json` (one JSON object on stdout). Use `agentswap <comman
 
 Never execute a preview the user has not reviewed. Never auto-execute. Facility creation and management are out of scope for this CLI; use the [protocol facility guide](https://github.com/agentic-labs-hq/agentic-protocol/blob/main/docs/FACILITY_GUIDE.md).
 
-`tx execute` only accepts a requestId created by a local preview, for the current chain and wallet. It consumes that preview; unknown or reused IDs are rejected.
+`tx execute` only accepts a requestId created by a local preview, for the current chain and wallet. It consumes that preview; unknown or reused IDs are rejected. The preview binding is stored in `AGENTSWAP_STATE_DIR` (default `~/.agentswap/tx-journal.json`); the execute process must be able to read the same state directory. Copying only the requestId to another machine, container, or user does not work.
+
+`ok`, `executed`, and `preview.requireConfirmation` are not chain-confirmation signals. `executed:true` means BAW accepted the execute call; it can still return `PENDING_CONFIRMATION`. Use `tx status --tx-hash` for broadcast/chain status. ERC-20 `needsApproval` is a token allowance, not a transaction approval; the Binance App confirmation is a separate wallet-side step.
+
+## LP mental model
+
+- `decreaseLiquidity` removes liquidity and records principal/fees as
+  `tokensOwed0/1`; it does not transfer them.
+- `collect` transfers owed tokens.
+- `burn` destroys the position NFT only when liquidity and both owed balances are
+  zero. Collect first.
+- `tickLower/tickUpper` are the price range, aligned to `tickSpacing`. Read
+  `tickSpacing`, `currentTick`, and decimals from `dex positions` or token/pool
+  metadata; the CLI does not calculate ticks from a price.
+- New token/pool addresses are in `TokenCreated` / `GatedPoolCreated` events, not
+  in the create preview. Use the explorer/BAW history or an indexer.
+- `dex positions` gives token IDs for a later `lp remove`.
 
 ## Parameter conventions
 

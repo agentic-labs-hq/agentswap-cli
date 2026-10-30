@@ -71,7 +71,7 @@ export function connectedBawHandler(options: {
   onExecute?: (args: string[]) => Record<string, unknown>;
 } = {}): (args: string[]) => FakeResponse {
   return (args) => {
-    if (args[0] === "--version") return `${options.version ?? "1.11.0"}\n`;
+    if (args[0] === "--version") return `${options.version ?? "1.12.0"}\n`;
     if (args[0] === "wallet" && args[1] === "status") return ok({ status: "CONNECTED" });
     if (args[0] === "wallet" && args[1] === "address") {
       return ok({

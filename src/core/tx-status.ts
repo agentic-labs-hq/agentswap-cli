@@ -17,7 +17,7 @@ const TX_HASH_PATTERN = /^0x[0-9a-fA-F]{64}$/;
 /**
  * `--tx-hash` queries BAW's tx-status endpoint. `--order-id` reads the local
  * journal written by tx execute and, when a txHash is known, enriches it from
- * BAW. BAW 1.11.0 has no contract-call orderId lookup, so the journal is the
+ * BAW. The BAW contract-call flow has no orderId lookup, so the journal is the
  * only way to map an orderId after execution.
  */
 export async function runTxStatus(
@@ -57,7 +57,7 @@ export async function runTxStatus(
   if (record === null) {
     throw new CliError(
       "ORDER_NOT_FOUND",
-      `No local record for orderId ${orderId}. BAW 1.11.0 has no contract-call order lookup; use --tx-hash after broadcast or query the Binance App.`,
+      `No local record for orderId ${orderId}. The BAW contract-call flow has no order lookup; use --tx-hash after broadcast or query the Binance App.`,
       { orderId },
     );
   }
@@ -93,7 +93,7 @@ export async function runTxStatus(
     freshness: record.txHash === null ? "unknown" : refreshed ? "tx-hash-query" : "stale-local",
     note:
       record.txHash === null
-        ? "This is the last local status, not a live chain query. BAW 1.11.0 has no contract-call orderId lookup; confirm in the Binance App and query by txHash once it is available."
+        ? "This is the last local status, not a live chain query. The BAW contract-call flow has no orderId lookup; confirm in the Binance App and query by txHash once it is available."
         : refreshed
           ? "Status refreshed from BAW tx-history by the recorded txHash."
           : "Could not refresh from BAW; this is the last local status, not a confirmed on-chain status.",

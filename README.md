@@ -14,6 +14,12 @@ New to Agent ID or Binance Agentic Wallet? Read [Background and concepts](https:
 - **Binance Agentic Wallet** is the non-custodial wallet and App confirmation flow. The CLI talks to it through the `baw` command.
 - **Eligible / active** means the protocol's live Agent ID check passes for the connected wallet. `agentswap doctor` reports the actual result.
 
+A few protocol terms used below:
+
+- **Gated token**: a fixed-supply ERC-20 whose transfer policy checks the sender and recipient. The policy is fixed when the token is created.
+- **Gated pool**: a stable, gated Uniswap V3 pool. Swaps and LP are agent-only.
+- **Facility**: a standard on-chain contract for a project's own token custody/roles. The CLI does not create facilities; if you only create tokens, pools, LP, or swaps, you do not need one. Initial token recipients may be active CUSTODY/PURPOSE facilities.
+
 ## Before you start
 
 - **Node.js 22.12+**.
@@ -90,17 +96,26 @@ agentswap token create \
   --metadata-uri ipfs://example/token.json --json
 # Replace the recipient with an eligible Agent ID wallet.
 
-# 3. Review requestId, parsedTx, simulationResult, risks, requireConfirmation.
-#    If allowances are missing, the result contains needsApproval previews.
-#    A preview response is a JSON object; the important parts look like:
+# 3. Review the response. For a normal preview the requestId is nested:
 #    {
-#      "requestId": "0x…",
+#      "ok": true,
+#      "command": "token create",
 #      "previewOnly": true,
-#      "parsedTx": { … },
-#      "simulationResult": { "success": true, … },
-#      "risks": [ … ],
-#      "requireConfirmation": true
+#      "executed": false,
+#      "preview": {
+#        "requestId": "0x…",
+#        "parsedTx": { … },
+#        "simulationResult": { … },
+#        "risks": { … },
+#        "requireConfirmation": true,
+#        "nextCommand": "agentswap tx execute --request-id 0x… --confirm"
+#      },
+#      "next": { "command": "agentswap tx execute --request-id 0x… --confirm", … },
+#      "warnings": [ … ]
 #    }
+#    Read result.preview.requestId. If allowances are missing, the result has
+#    status="needsApproval" and the requestId is under
+#    result.needsApproval[i].preview.requestId.
 
 # 4. Execute exactly that preview after explicit confirmation.
 agentswap tx execute --request-id <requestId> --confirm
@@ -121,13 +136,84 @@ Preview commands never call `execute`. `agentswap tx execute` refuses without `-
 | `orderId` | Local journal entry created after execute | Last-known local record; not a live chain query. |
 | `txHash` | Broadcast transaction | Use `tx status --tx-hash` for live BAW/chain status. |
 
+### Where to read the next step
+
+| Response shape | `requestId` path | command path |
+| --- | --- | --- |
+| Normal preview (`token create`, `pool create`, normal `lp add`, `swap`) | `result.preview.requestId` | `result.preview.nextCommand` or `result.next.command` |
+| Approval preview (`status: "needsApproval"`) | `result.needsApproval[i].preview.requestId` | `result.needsApproval[i].nextCommand` or `result.next.commands[i]` |
+| Multi-step LP remove (`orderedSteps`) | `result.orderedSteps[i].requestId` (also `.preview.requestId`) | `result.orderedSteps[i].nextCommand` or `result.next.commands[i]` |
+| Error | none | `result.error.code` / `result.error.message` |
+
+Approval branch shape:
+
+```json
+{
+  "status": "needsApproval",
+  "needsApproval": [
+    {
+      "kind": "approve",
+      "preview": { "requestId": "0x…", "nextCommand": "agentswap tx execute --request-id 0x… --confirm" },
+      "nextCommand": "agentswap tx execute --request-id 0x… --confirm"
+    }
+  ],
+  "next": { "commands": ["agentswap tx execute --request-id 0x… --confirm"] }
+}
+```
+
+LP remove branch shape:
+
+```json
+{
+  "requiresSequentialExecution": true,
+  "orderedSteps": [
+    {
+      "index": 1,
+      "kind": "decrease",
+      "requestId": "0x…",
+      "nextCommand": "agentswap tx execute --request-id 0x… --confirm",
+      "preview": { "requestId": "0x…" }
+    }
+  ],
+  "next": {
+    "commands": ["agentswap tx execute --request-id 0x… --confirm"],
+    "recoveryAfterDecrease": "agentswap dex lp remove --token-id 123 --collect-only"
+  }
+}
+```
+
+Error shape:
+
+```json
+{ "ok": false, "error": { "code": "BAW_PREVIEW_REJECTED", "message": "…" } }
+```
+
 If the preview contains `needsApproval`, execute the approval preview(s) first,
 then re-run the original command to preview the dependent action. If the response
 contains `orderedSteps` / `requiresSequentialExecution`, execute the steps in the
-listed order and use each step's `next` field for the following command; do not
-jump to the final step. If execute returns `PENDING_CONFIRMATION`, confirm or
-reject in the Binance App; after broadcast, obtain the txHash and use
-`tx status --tx-hash`.
+listed order and use each step's `nextCommand`; do not jump to the final step.
+`next.recoveryAfterDecrease` is the command to use only after the decrease has
+confirmed.
+
+The local preview binding is stored in `AGENTSWAP_STATE_DIR` (default
+`~/.agentswap/tx-journal.json`), together with execution records. A `requestId`
+is not portable across machines or state directories: the same CLI/MCP process
+environment must be able to read that state file. If you run preview and execute
+in different containers or users, set the same `AGENTSWAP_STATE_DIR` for both.
+
+### What `ok`, `executed`, and `requireConfirmation` mean
+
+| Field | Means | Does not mean |
+| --- | --- | --- |
+| `ok: true` | The command produced a valid result | The transaction is confirmed on-chain |
+| `executed: true` | `tx execute` accepted the request and called BAW | The transaction is necessarily broadcast or confirmed |
+| `preview.requireConfirmation: true` | The Binance App may require an extra approval | The user has already approved the operation |
+| `status: "PENDING_CONFIRMATION"` | BAW accepted the execute request but waits for App action | The transaction is complete |
+
+`agentswap tx execute --confirm` is the user's explicit approval for this CLI
+step. ERC-20 `needsApproval` is a token allowance, not a transaction approval.
+Binance App confirmation is a separate wallet-side step. Use
+`tx status --tx-hash` for broadcast/chain status.
 
 ## Commands
 
@@ -149,6 +235,14 @@ reject in the Binance App; after broadcast, obtain the txHash and use
 
 Use `--json` on any command for exactly one JSON object on stdout. Run `agentswap <command> --help` for flags and examples.
 
+### Supported interfaces
+
+The supported user interfaces are the `agentswap` CLI, the `agentswap-mcp`
+server, and the `agentswap skill` guide. The JavaScript exports in `dist/`
+(`main`, `types`, and `exports`) are implementation exports for these
+interfaces, not a stable public API. Do not build a product integration against
+those modules unless you are prepared to follow their internal changes.
+
 ### Parameter conventions
 
 - `--token` and `--quote` are the two logical sides you name. On-chain they
@@ -166,9 +260,53 @@ Use `--json` on any command for exactly one JSON object on stdout. Run `agentswa
   `--no-burn`; omit `--liquidity` to remove 100%. After a decrease, use
   `--collect-only` to collect and optionally burn; do not re-run the decrease.
 
-Example: if `--token` sorts after `--quote`, then `--amount0` is the
-`--quote` amount. Check the position/pool output or sort the addresses yourself
-before choosing the numbers.
+Example with USDT/WBNB:
+
+- USDT `0x55d3…` sorts before WBNB `0xbb4C…`, so **token0 = USDT** and
+  **token1 = WBNB**, regardless of the `--token`/`--quote` order.
+- `--amount0 100` means 100 USDT (human units); `--min-amount0 99000000` is
+  99 USDT in raw 6-decimal units.
+- `--amount1 0.05` means 0.05 WBNB; `--min-amount1 49500000000000000` is
+  0.0495 WBNB in raw 18-decimal units.
+- For a quote, `--exact-out --amount-in 100` means “I want 100 units out”, not
+  “I am putting 100 units in”.
+
+Check the pool/position output or sort the addresses yourself before choosing
+the numbers.
+
+### LP actions and parameters
+
+- **decreaseLiquidity** reduces a position's liquidity. The removed principal
+  and fees become `tokensOwed0` / `tokensOwed1`; they are not transferred yet.
+- **collect** transfers those owed tokens to a recipient. It is a separate
+  transaction.
+- **burn** destroys the position NFT. It only succeeds when liquidity is zero
+  and both owed balances are zero; collect first.
+- `tickLower` / `tickUpper` define the price range. They must be multiples of the
+  pool's `tickSpacing`; read `tickSpacing`, `currentTick`, and token decimals from
+  `agentswap dex positions` or the pool/token metadata. This CLI does not
+  calculate ticks from a desired price.
+- `amount0` / `amount1` are desired human amounts for sorted token0/token1;
+  `minAmount0` / `minAmount1` are required raw base-unit floors.
+- After a full decrease, `--collect-only` previews collect and burn. After a
+  partial decrease, use `--no-burn` and collect later; do not re-run the decrease.
+
+### One task, several commands
+
+The CLI does not hide the transaction boundary. A typical sequence is:
+
+1. `token create` preview → execute → status. The new token address comes from the
+   `TokenCreated` event or the explorer/BAW transaction history, not from the
+   preview's `token.address` field (which is `null` before creation).
+2. `dex pool create` preview → execute → status. The pool address comes from the
+   `GatedPoolCreated` event.
+3. `dex lp add` uses the pool's token0/token1 order, fee, tick spacing, and your
+   chosen tick range. `dex positions` lists existing token IDs for a later
+   `dex lp remove`.
+
+If you only want the protocol-level TypeScript walkthrough, use the Agentic
+Protocol quickstart. The CLI is the transaction client; it does not replace event
+indexing or a position dashboard.
 
 ### Key flags
 
@@ -243,7 +381,7 @@ Preview tools return structured JSON plus readable text and never broadcast. No 
 | Variable | Purpose |
 | --- | --- |
 | `AGENTSWAP_RPC_URL` | BSC RPC endpoint. Defaults to a public BSC endpoint. |
-| `AGENTSWAP_STATE_DIR` | Optional directory for the local `orderId` journal. No credentials are stored. |
+| `AGENTSWAP_STATE_DIR` | Directory for `tx-journal.json` (default `~/.agentswap`). It stores preview bindings and execution records; preview and execute must see the same directory. No credentials are stored. |
 
 ## Troubleshooting
 

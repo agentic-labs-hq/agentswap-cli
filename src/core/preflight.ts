@@ -136,7 +136,7 @@ export async function assertPoolCreatePreflight(
   return { token: tokenInfo, quote: quoteInfo };
 }
 
-/** NPM gating: LP recipient and payer must be agents for every gated token in the pool. */
+/** position-manager gating: LP recipient and payer must be agents for every gated token in the pool. */
 export async function assertLpRecipientsEligible(
   sdk: Sdk,
   token0: Address,

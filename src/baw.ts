@@ -5,8 +5,8 @@ import type { Address, Hex } from "viem";
 import { CliError } from "./errors.js";
 import { redactSecrets } from "./json.js";
 
-/** Version required by the official `binance-agentic-wallet` skill (1.13.0). */
-export const REQUIRED_BAW_VERSION = "1.11.0";
+/** Minimum `baw` version required by the official Binance Agentic Wallet skill. */
+export const REQUIRED_BAW_VERSION = "1.12.0";
 export const BSC_BINANCE_CHAIN_ID = "56";
 
 export interface BawErrorInfo {
@@ -49,7 +49,7 @@ function executeBaw(args: readonly string[], timeoutMs: number): Promise<BawRunn
           reject(
             new CliError(
               "BAW_NOT_INSTALLED",
-              "The `baw` CLI is not installed or not on PATH. Install @binance/agentic-wallet@1.11.0 and retry.",
+              "The `baw` CLI is not installed or not on PATH. Install @binance/agentic-wallet@1.12.0 and retry.",
             ),
           );
           return;

@@ -2,7 +2,7 @@ import { parseAbi } from "viem";
 
 /**
  * Minimal ABI fragments for calls the SDK does not expose as typed helpers
- * (simulation and NPM enumeration). The SDK's generated ABIs are authoritative
+ * (simulation and position-manager enumeration). The SDK's generated ABIs are authoritative
  * for the typed read/write clients; these fragments keep this package compiling
  * against the built SDK surface without modifying protocol source.
  */

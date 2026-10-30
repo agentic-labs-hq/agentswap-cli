@@ -101,12 +101,12 @@ server.registerTool(
   "agentswap_token_create",
   {
     title: "Preview gated token creation",
-    description: `Build AgenticTokenFactory.createToken calldata and preview it via baw contract-call preview. ${WALLET_NOTE} Returns requestId/parsedTx/simulation/risks/nextCommand; sends nothing.`,
+    description: `Build AgenticTokenFactory.createToken calldata and preview it via baw contract-call preview. The caller becomes the creator; every recipient must be an eligible Agent ID wallet or an active CUSTODY/PURPOSE facility. Supply is split evenly and fixed at creation. ${WALLET_NOTE} Read the requestId from preview.requestId and the execute command from preview.nextCommand; top-level next.command is equivalent. Sends nothing.`,
     inputSchema: {
       name: z.string().min(1).max(64).describe("Token name (1-64 characters)."),
       symbol: z.string().min(1).max(16).describe("Token symbol (1-16 characters)."),
       supply: z.string().describe("Human 18-decimal total supply, e.g. \"1000000\"."),
-      recipients: z.array(z.string()).min(1).describe("Recipient addresses; supply is split evenly."),
+      recipients: z.array(z.string()).min(1).describe("Eligible Agent ID wallets or active CUSTODY/PURPOSE facilities; supply is split evenly."),
       metadataUri: z.string().describe("Off-chain metadata URI (no whitespace)."),
       policy: z.string().optional().describe("Optional transfer policy; defaults to the current policy."),
     },
@@ -129,7 +129,7 @@ server.registerTool(
   "agentswap_token_approve",
   {
     title: "Preview ERC-20 approval",
-    description: `Build ERC-20 approve(spender, amount) calldata and preview it. Use amount 0 to revoke. ${WALLET_NOTE}`,
+    description: `Build ERC-20 approve(spender, amount) calldata and preview it. Use amount 0 to revoke. ${WALLET_NOTE} Read preview.requestId and preview.nextCommand.`,
     inputSchema: {
       token: z.string().describe("ERC-20 token address."),
       spender: z.string().describe("Spender address (e.g. the position manager or router)."),
@@ -151,10 +151,10 @@ server.registerTool(
   "agentswap_dex_pool_create",
   {
     title: "Preview gated pool creation",
-    description: `Build AgentswapPoolFactory.createPool calldata and preview it. Provide exactly one of price/sqrtPriceX96. ${WALLET_NOTE}`,
+    description: `Build AgentswapPoolFactory.createPool calldata and preview it. At least one side must be a gated asset; the caller must be the creator of every gated side; every non-gated side must be an approved quote asset. Provide exactly one of price/sqrtPriceX96. ${WALLET_NOTE} Read the requestId from preview.requestId and the next command from preview.nextCommand.`,
     inputSchema: {
       token: z.string().describe("Token address."),
-      quote: z.string().describe("Quote/token address (must differ)."),
+      quote: z.string().describe("Quote/token address (must differ). The on-chain token0/token1 order may differ."),
       fee: z.number().int().positive().describe("Uniswap V3 fee tier (100, 500, 3000, or 10000)."),
       price: z.string().optional().describe("Human quote-token units per one token unit."),
       sqrtPriceX96: z.string().optional().describe("Raw Q64.96 sqrt price (decimal integer)."),
@@ -177,18 +177,18 @@ server.registerTool(
   "agentswap_dex_lp_add",
   {
     title: "Preview gated LP mint or approvals",
-    description: `Check position-manager allowances; if insufficient, return needsApproval with exact approval previews (including USDT-style resets) and do not preview the mint. If sufficient, build position-manager mint calldata and preview it. ${WALLET_NOTE}`,
+    description: `Check position-manager allowances; if insufficient, return status=needsApproval with exact approval previews (including USDT-style resets) and do not preview the mint. If sufficient, build position-manager mint calldata and preview it. token/quote are logical sides; amount0/amount1 refer to the sorted token0/token1. amount0/amount1 are human units; minAmount0/minAmount1 are required raw base units. ${WALLET_NOTE} For approvals read needsApproval[i].preview.requestId and needsApproval[i].nextCommand, then re-run this tool after they confirm. For a mint read preview.requestId.`,
     inputSchema: {
-      token: z.string().describe("Token address."),
-      quote: z.string().describe("Quote/token address (must differ)."),
+      token: z.string().describe("One logical side of the pool."),
+      quote: z.string().describe("Other logical side (must differ). On-chain token0/token1 may be sorted differently."),
       fee: z.number().int().positive().describe("Pool fee tier."),
-      tickLower: z.number().int().describe("Lower tick (aligned to tick spacing)."),
-      tickUpper: z.number().int().describe("Upper tick (aligned to tick spacing)."),
-      amount0: z.string().describe("Desired pool token0 amount in human decimals."),
-      amount1: z.string().describe("Desired pool token1 amount in human decimals."),
-      minAmount0: z.string().optional().describe("Raw base-unit token0 minimum; required for LP mint."),
-      minAmount1: z.string().optional().describe("Raw base-unit token1 minimum; required for LP mint."),
-      recipient: z.string().optional().describe("Position recipient; defaults to the Agentic Wallet."),
+      tickLower: z.number().int().describe("Lower tick, aligned to the pool tick spacing."),
+      tickUpper: z.number().int().describe("Upper tick, aligned to the pool tick spacing."),
+      amount0: z.string().describe("Desired sorted token0 amount, human units."),
+      amount1: z.string().describe("Desired sorted token1 amount, human units."),
+      minAmount0: z.string().describe("Required raw base-unit sorted token0 minimum."),
+      minAmount1: z.string().describe("Required raw base-unit sorted token1 minimum."),
+      recipient: z.string().optional().describe("Position recipient; must be an eligible agent; defaults to the Agentic Wallet."),
     },
     annotations: PREVIEW_ANNOTATIONS,
   },
@@ -202,8 +202,8 @@ server.registerTool(
         tickUpper: String(args.tickUpper),
         amount0: args.amount0,
         amount1: args.amount1,
-        ...(args.minAmount0 === undefined ? {} : { minAmount0: args.minAmount0 }),
-        ...(args.minAmount1 === undefined ? {} : { minAmount1: args.minAmount1 }),
+        minAmount0: args.minAmount0,
+        minAmount1: args.minAmount1,
         ...(args.recipient === undefined ? {} : { recipient: args.recipient }),
       }),
     ),
@@ -213,7 +213,7 @@ server.registerTool(
   "agentswap_dex_lp_remove",
   {
     title: "Preview LP decrease/collect/burn",
-    description: `Read a position-manager position owned by the Binance Agentic Wallet, then build and preview decreaseLiquidity -> collect(max) -> burn in order. --liquidity omitted means full; accepts a raw uint128 amount or a percentage like "50%". Partial removal requires noBurn=true. Returns orderedSteps with requestId/nextCommand for successful previews, marks requiresSequentialExecution, and never executes. ${WALLET_NOTE}`,
+    description: `Read a position-manager position owned by the Binance Agentic Wallet, then build and preview decreaseLiquidity -> collect(max) -> burn in order. liquidity omitted means full; accepts a raw uint128 amount or a percentage like "50%". Partial removal requires noBurn=true. When decreasing, minAmount0/minAmount1 are required raw base units. Returns orderedSteps[i].requestId (also orderedSteps[i].preview.requestId) and orderedSteps[i].nextCommand; top-level next.commands lists successful steps and next.recoveryAfterDecrease is the collect-only recovery after the decrease confirms. requiresSequentialExecution=true means execute in order, do not re-run the decrease. Never executes. ${WALLET_NOTE}`,
     inputSchema: {
       tokenId: z.string().describe("position-manager tokenId (decimal string)."),
       liquidity: z.string().optional().describe("Raw liquidity amount or percentage such as \"50%\"; omitted = full."),
@@ -230,8 +230,8 @@ server.registerTool(
       runLpRemove(runtime, {
         tokenId: args.tokenId,
         ...(args.liquidity === undefined ? {} : { liquidity: args.liquidity }),
-        ...(args.minAmount0 === undefined ? {} : { minAmount0: args.minAmount0 }),
-        ...(args.minAmount1 === undefined ? {} : { minAmount1: args.minAmount1 }),
+        minAmount0: args.minAmount0,
+        minAmount1: args.minAmount1,
         noCollect: args.noCollect,
         noBurn: args.noBurn,
         collectOnly: args.collectOnly,
@@ -270,7 +270,7 @@ server.registerTool(
   "agentswap_dex_swap",
   {
     title: "Preview exact-input swap or approval",
-    description: `Check the ERC-20 input allowance; if insufficient, return needsApproval previews. If sufficient (or native BNB input), build and preview the swap. Native input accepts BNB/native/eth/0xEeee... and sets the preview value in wei. With nativeOut=true, tokenOut must be a native alias; the router multicall swaps to WBNB with recipient=router then unwrapWETH9 sends BNB to the recipient. ${WALLET_NOTE}`,
+    description: `Check the ERC-20 input allowance; if insufficient, return needsApproval previews and do not preview the swap. If sufficient (or native BNB input), build and preview the swap. Native input accepts BNB/native/eth/0xEeee... and sets the preview value in wei. With nativeOut=true, tokenOut must be a native alias; the router multicall swaps to WBNB with recipient=router then unwrapWETH9 sends BNB to the recipient. ${WALLET_NOTE} Read needsApproval[i].preview.requestId or preview.requestId, and the matching nextCommand/next.commands.`,
     inputSchema: {
       tokenIn: z.string().describe("Input token address or BNB/native for native BNB."),
       tokenOut: z.string().describe("Output token address, or native alias when nativeOut=true."),
@@ -303,7 +303,7 @@ server.registerTool(
   {
     title: "List LP positions",
     description:
-      "Read-only position-manager list. Owner defaults to the Binance Agentic Wallet BSC address; --owner works without BAW. Includes pair, fee, ticks, liquidity, owed tokens, pool, current tick, and in-range status.",
+      "Read-only position-manager list. owner defaults to the Binance Agentic Wallet BSC address; owner can be supplied without BAW. Includes pair, fee, ticks, liquidity, owed tokens, pool, current tick, and in-range status.",
     inputSchema: {
       owner: z.string().optional().describe("Owner address; defaults to the Agentic Wallet."),
     },
@@ -322,9 +322,9 @@ server.registerTool(
   {
     title: "Execute previewed request",
     description:
-      "EXECUTES exactly one requestId returned by a previous preview via baw contract-call execute. Requires confirmed:true; no key argument is accepted. Signing and any Binance App confirmation happen in Binance Agentic Wallet. Refuses without confirmed:true.",
+      "EXECUTES exactly one requestId returned by a previous preview via baw contract-call execute. Requires confirmed:true; no key argument is accepted. Signing and any Binance App confirmation happen in Binance Agentic Wallet. Refuses without confirmed:true. requestId comes from preview.requestId, needsApproval[i].preview.requestId, or orderedSteps[i].requestId.",
     inputSchema: {
-      requestId: z.string().min(1).describe("requestId returned by a preview tool."),
+      requestId: z.string().min(1).describe("preview.requestId, needsApproval[i].preview.requestId, or orderedSteps[i].requestId."),
       confirmed: z.boolean().optional().describe("Must be true; explicit confirmation to execute."),
     },
     annotations: EXECUTE_ANNOTATIONS,
@@ -343,7 +343,7 @@ server.registerTool(
   {
     title: "Transaction status",
     description:
-      "Query status by txHash through BAW, or by orderId from the local journal written by tx execute. BAW 1.11.0 has no contract-call orderId lookup. Read-only.",
+      "Query status by txHash through BAW, or by orderId from the local journal written by tx execute. The BAW contract-call flow has no orderId lookup. Read-only.",
     inputSchema: {
       orderId: z.string().optional().describe("orderId from tx execute (local journal)."),
       txHash: z.string().optional().describe("0x transaction hash (BAW tx-history lookup)."),

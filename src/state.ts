@@ -53,7 +53,7 @@ function emptyJournal(): TxJournal {
 
 /**
  * Local journal mapping BAW requestId -> preview binding and BAW orderId ->
- * execution record. BAW 1.11.0 exposes no contract-call order lookup, so this is
+ * execution record. The BAW contract-call flow exposes no order lookup, so this is
  * what makes preview-bound execute and `tx status --order-id` possible. It
  * contains no credentials and is written 0600.
  */

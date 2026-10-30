@@ -104,9 +104,9 @@ describe("BawClient commands", () => {
   });
 
   it("reads the local version without JSON", async () => {
-    const fake = fakeBaw(() => "1.11.0\n");
+    const fake = fakeBaw(() => "1.12.0\n");
     const client = new BawClient(fake.runner);
-    await expect(client.version()).resolves.toBe("1.11.0");
+    await expect(client.version()).resolves.toBe("1.12.0");
     expect(fake.calls[0]).toEqual(["--version"]);
   });
 
@@ -210,10 +210,10 @@ describe("BawCommandError", () => {
 
 describe("versionAtLeast", () => {
   it("compares semantic versions", () => {
-    expect(versionAtLeast("1.11.0", "1.11.0")).toBe(true);
-    expect(versionAtLeast("1.12.0", "1.11.0")).toBe(true);
-    expect(versionAtLeast("1.10.9", "1.11.0")).toBe(false);
-    expect(versionAtLeast("2.0.0", "1.11.0")).toBe(true);
-    expect(versionAtLeast("garbage", "1.11.0")).toBe(false);
+    expect(versionAtLeast("1.12.0", "1.12.0")).toBe(true);
+    expect(versionAtLeast("1.12.0", "1.12.0")).toBe(true);
+    expect(versionAtLeast("1.10.9", "1.12.0")).toBe(false);
+    expect(versionAtLeast("2.0.0", "1.12.0")).toBe(true);
+    expect(versionAtLeast("garbage", "1.12.0")).toBe(false);
   });
 });

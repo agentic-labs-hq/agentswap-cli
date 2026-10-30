@@ -22,7 +22,7 @@ export interface PositionsOptions {
 const MAX_POSITIONS = 200;
 
 /**
- * Enumerate NPM positions. The owner defaults to the Binance Agentic Wallet BSC
+ * Enumerate position-manager positions. The owner defaults to the Binance Agentic Wallet BSC
  * address; `--owner` can be used without BAW. Read-only.
  */
 export async function runPositions(runtime: Runtime, options: PositionsOptions): Promise<CommandResult> {

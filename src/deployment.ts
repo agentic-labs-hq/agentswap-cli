@@ -17,7 +17,7 @@ export interface Deployment {
   governance?: Address;
   deployer?: Address;
   addresses: ContractAddresses;
-  /** Immutable Agent ID transfer policy used by the branded deployment. */
+  /** Immutable Agent ID transfer policy used by this deployment. */
   policy: Address;
   identityAdapter: Address;
   agentIdRegistry: Address;

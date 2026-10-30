@@ -26,7 +26,7 @@ describe("checkAgenticWallet", () => {
 
   it("reports UNCONNECTED without calling address/settings", async () => {
     const fake = fakeBaw((args) => {
-      if (args[0] === "--version") return "1.11.0\n";
+      if (args[0] === "--version") return "1.12.0\n";
       if (args[1] === "status") return ok({ status: "UNCONNECTED" });
       throw new Error(`unexpected ${args.join(" ")}`);
     });
@@ -64,7 +64,7 @@ describe("checkAgenticWallet", () => {
 
   it("throws BAW_UNAVAILABLE when BAW cannot reach Binance", async () => {
     const fake = fakeBaw((args) => {
-      if (args[0] === "--version") return "1.11.0\n";
+      if (args[0] === "--version") return "1.12.0\n";
       return fail({ code: 50001001, name: "NETWORK_ERROR", message: "TLS connection failed" });
     });
     await expect(checkAgenticWallet(new BawClient(fake.runner))).rejects.toMatchObject({
@@ -74,7 +74,7 @@ describe("checkAgenticWallet", () => {
 
   it("returns a tolerant BAW error report for status", async () => {
     const fake = fakeBaw((args) => {
-      if (args[0] === "--version") return "1.11.0\n";
+      if (args[0] === "--version") return "1.12.0\n";
       return fail({ code: 50001001, name: "NETWORK_ERROR", message: "TLS connection failed" });
     });
     const report = await checkAgenticWallet(new BawClient(fake.runner), { tolerant: true });

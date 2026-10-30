@@ -106,7 +106,7 @@ export const COMMANDS: Record<string, CommandSpec> = {
     },
   },
   "dex positions": {
-    summary: "list NPM positions for an owner (read-only)",
+    summary: "list position-manager positions for an owner (read-only)",
     flags: {
       owner: "value",
     },
