@@ -82,6 +82,8 @@ Never execute a preview the user has not reviewed. Never auto-execute. Facility 
 
 `ok`, `executed`, and `preview.requireConfirmation` are not chain-confirmation signals. `executed:true` means BAW accepted the execute call; it can still return `PENDING_CONFIRMATION`. Use `tx status --tx-hash` for broadcast/chain status. ERC-20 `needsApproval` is a token allowance, not a transaction approval; the Binance App confirmation is a separate wallet-side step.
 
+Metadata URI is opaque: the CLI passes it through and does not upload, fetch, or validate the JSON. Host it yourself (`ipfs://` or `https://`); no on-chain schema is enforced.
+
 ## LP mental model
 
 - `decreaseLiquidity` removes liquidity and records principal/fees as
@@ -92,6 +94,9 @@ Never execute a preview the user has not reviewed. Never auto-execute. Facility 
 - `tickLower/tickUpper` are the price range, aligned to `tickSpacing`. Read
   `tickSpacing`, `currentTick`, and decimals from `dex positions` or token/pool
   metadata; the CLI does not calculate ticks from a price.
+- Complete USDT/WBNB 0.30% example (USDT is token0): `--token WBNB --quote USDT
+  --amount0 100 --amount1 0.05 --min-amount0 99000000
+  --min-amount1 49500000000000000 --tick-lower -887220 --tick-upper 887220`.
 - New token/pool addresses are in `TokenCreated` / `GatedPoolCreated` events, not
   in the create preview. Use the explorer/BAW history or an indexer.
 - `dex positions` gives token IDs for a later `lp remove`.
@@ -121,7 +126,7 @@ agentswap dex pool create --token <addr> --quote <addr> --fee <uint24> \
 ```
 
 - Token supply is fixed at 18 decimals and split evenly across recipients; remainder goes to the first.
-- Initial recipients must be eligible agents or active CUSTODY/PURPOSE facilities.
+- Initial recipients must be eligible agents or active `CUSTODY`/`PURPOSE` facilities (project token custody or game/escrow utility).
 - Pool creation requires at least one gated side; the wallet must be creator of every gated side; non-gated sides must be approved quote assets (WBNB/USDT).
 
 ## LP add
@@ -163,7 +168,7 @@ agentswap dex swap --token-in <addr|BNB> --token-out <addr|BNB> --fee <uint24> \
 ```
 
 - ERC-20 input with insufficient allowance → `needsApproval` previews; execute them, then re-run.
-- Native input (`BNB`/`native`/`ETH`/`0xEeee…`) sends `--value` in wei.
+- Native input (`BNB`/`native`/`ETH`/`0xEeee…`) sends `--value` in wei. `ETH` is a legacy BSC alias for BNB; WBNB is wrapped BNB, and `unwrapWETH9` returns native BNB.
 - `--native-out` requires a native `--token-out`; builds router `multicall(exactInputSingle → unwrapWETH9)` so BNB lands in the recipient. BNB → BNB is rejected. Verify BAW shows a native balance increase and no WBNB left.
 - Without `--native-out`, WBNB output remains WBNB.
 - `--min-out` is output units; for native output it is BNB units.
@@ -242,15 +247,17 @@ npx -y @agentswap/cli@0.1.2 doctor
 npx -y -p @agentswap/cli@0.1.2 agentswap doctor
 ```
 
-Local tarball:
+If you already have a tarball:
 
 ```sh
-npm pack
 npm install -g ./agentswap-cli-0.1.2.tgz
 agentswap doctor
 ```
 
+To build a tarball from source, use the repository's CONTRIBUTING instructions;
+`npm pack` is a source-tree operation, not an installed-package command.
+
 ## Environment
 
 - `AGENTSWAP_RPC_URL` — optional BSC RPC endpoint.
-- `AGENTSWAP_STATE_DIR` — optional local order journal directory; no credentials.
+- `AGENTSWAP_STATE_DIR` — state directory (default `~/.agentswap`); `tx-journal.json` stores preview bindings and execution records. Preview and execute must share it. No credentials.

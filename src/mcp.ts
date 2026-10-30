@@ -107,7 +107,7 @@ server.registerTool(
       symbol: z.string().min(1).max(16).describe("Token symbol (1-16 characters)."),
       supply: z.string().describe("Human 18-decimal total supply, e.g. \"1000000\"."),
       recipients: z.array(z.string()).min(1).describe("Eligible Agent ID wallets or active CUSTODY/PURPOSE facilities; supply is split evenly."),
-      metadataUri: z.string().describe("Off-chain metadata URI (no whitespace)."),
+      metadataUri: z.string().describe("Opaque off-chain URI stored by the token; the CLI does not upload, fetch, or validate its JSON schema. No whitespace."),
       policy: z.string().optional().describe("Optional transfer policy; defaults to the current policy."),
     },
     annotations: PREVIEW_ANNOTATIONS,
@@ -322,7 +322,7 @@ server.registerTool(
   {
     title: "Execute previewed request",
     description:
-      "EXECUTES exactly one requestId returned by a previous preview via baw contract-call execute. Requires confirmed:true; no key argument is accepted. Signing and any Binance App confirmation happen in Binance Agentic Wallet. Refuses without confirmed:true. requestId comes from preview.requestId, needsApproval[i].preview.requestId, or orderedSteps[i].requestId.",
+      "EXECUTES exactly one requestId returned by a previous preview via baw contract-call execute. Requires confirmed:true; no key argument is accepted. Signing and any Binance App confirmation happen in Binance Agentic Wallet. Refuses without confirmed:true. requestId comes from preview.requestId, needsApproval[i].preview.requestId, or orderedSteps[i].requestId. The preview binding is local, single-use, and must be readable from AGENTSWAP_STATE_DIR by the execute process; copying only the requestId to another machine, container, or user will fail.",
     inputSchema: {
       requestId: z.string().min(1).describe("preview.requestId, needsApproval[i].preview.requestId, or orderedSteps[i].requestId."),
       confirmed: z.boolean().optional().describe("Must be true; explicit confirmation to execute."),

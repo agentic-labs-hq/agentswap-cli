@@ -17,8 +17,8 @@ New to Agent ID or Binance Agentic Wallet? Read [Background and concepts](https:
 A few protocol terms used below:
 
 - **Gated token**: a fixed-supply ERC-20 whose transfer policy checks the sender and recipient. The policy is fixed when the token is created.
-- **Gated pool**: a stable, gated Uniswap V3 pool. Swaps and LP are agent-only.
-- **Facility**: a standard on-chain contract for a project's own token custody/roles. The CLI does not create facilities; if you only create tokens, pools, LP, or swaps, you do not need one. Initial token recipients may be active CUSTODY/PURPOSE facilities.
+- **Gated pool**: a gated Uniswap V3 pool. Swaps and LP are agent-only.
+- **Facility**: a standard on-chain contract for a project's own token custody/roles. The CLI does not create facilities; if you only create tokens, pools, LP, or swaps, you do not need one. Initial token recipients may be active `CUSTODY` or `PURPOSE` facilities (the two project-facility categories: custody of project tokens, or game/escrow utility).
 
 ## Before you start
 
@@ -126,6 +126,10 @@ agentswap tx status --tx-hash <txHash>
 # --order-id is only the local last-known record; it is not a live chain query.
 ```
 
+`--metadata-uri` is passed through unchanged. The CLI does not upload, fetch, or
+validate the URI or its JSON. Use an `ipfs://` or `https://` URI that you host
+yourself; the protocol stores the URI but does not enforce a metadata schema.
+
 Preview commands never call `execute`. `agentswap tx execute` refuses without `--confirm`, and it only accepts a `requestId` created by a local preview bound to the current chain and wallet. A requestId from elsewhere is rejected.
 
 ### The three identifiers
@@ -188,6 +192,37 @@ Error shape:
 { "ok": false, "error": { "code": "BAW_PREVIEW_REJECTED", "message": "…" } }
 ```
 
+Partial success inside `orderedSteps` looks like this: check `error` first, then
+execute only steps with a non-null `requestId`.
+
+```json
+{
+  "requiresSequentialExecution": true,
+  "orderedSteps": [
+    {
+      "index": 1,
+      "kind": "decrease",
+      "requestId": "0x…",
+      "nextCommand": "agentswap tx execute --request-id 0x… --confirm",
+      "preview": { "requestId": "0x…" },
+      "error": null
+    },
+    {
+      "index": 2,
+      "kind": "collect",
+      "requestId": null,
+      "nextCommand": null,
+      "preview": null,
+      "error": { "code": "BAW_PREVIEW_REJECTED", "message": "collect preview was rejected" }
+    }
+  ],
+  "next": {
+    "commands": ["agentswap tx execute --request-id 0x… --confirm"],
+    "recoveryAfterDecrease": "agentswap dex lp remove --token-id 123 --collect-only"
+  }
+}
+```
+
 If the preview contains `needsApproval`, execute the approval preview(s) first,
 then re-run the original command to preview the dependent action. If the response
 contains `orderedSteps` / `requiresSequentialExecution`, execute the steps in the
@@ -234,6 +269,18 @@ Binance App confirmation is a separate wallet-side step. Use
 | `agentswap tx status` | Query by `--tx-hash`, or by `--order-id` from the local execute journal. |
 
 Use `--json` on any command for exactly one JSON object on stdout. Run `agentswap <command> --help` for flags and examples.
+
+### Reading doctor and status output
+
+| Field | Meaning |
+| --- | --- |
+| `poolFactory` (`gatedPoolFactory`) | Agentswap wrapper that enforces gated asset/creator/quote rules. |
+| `poolFactory.canonicalFactory` | Underlying Uniswap V3 factory used by the gated wrapper. |
+| `poolFactory.canonicalFactoryMatches` | Address-book check; `false` is a configuration problem, not a user action. |
+| `poolFactory.gatedOwner` | Owner of the canonical V3 factory; not your wallet. |
+| `venueRegistry` | Facility registry (the code also calls it a venue registry); records pools and project facilities. |
+| `identityAdapter` / `identityRegistry` | External Agent ID adapter and the registry of enabled identity adapters. |
+| `legacyFacilityFactory` / `escrowV2TemplateDeployer` / `facilityV2DeploymentBlock` | Deployment-history fields in the address book; ordinary CLI users do not need them. |
 
 ### Supported interfaces
 
@@ -291,6 +338,27 @@ the numbers.
 - After a full decrease, `--collect-only` previews collect and burn. After a
   partial decrease, use `--no-burn` and collect later; do not re-run the decrease.
 
+### Complete LP example
+
+For a USDT/WBNB 0.30% pool, USDT sorts first:
+
+```sh
+agentswap dex lp add \
+  --token 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c \
+  --quote 0x55d398326f99059fF775485246999027B3197955 \
+  --fee 3000 \
+  --tick-lower -887220 --tick-upper 887220 \
+  --amount0 100 --amount1 0.05 \
+  --min-amount0 99000000 --min-amount1 49500000000000000 \
+  --json
+```
+
+- token0 = USDT (6 decimals), token1 = WBNB (18 decimals).
+- 100 USDT and 0.05 WBNB; minima are 99 USDT and 0.0495 WBNB.
+- Full-range ticks for a 60-spacing pool; this example does not derive a narrow
+  range from a target price.
+- Preview only. Execute the returned `preview.requestId` after review.
+
 ### One task, several commands
 
 The CLI does not hide the transaction boundary. A typical sequence is:
@@ -304,6 +372,16 @@ The CLI does not hide the transaction boundary. A typical sequence is:
    chosen tick range. `dex positions` lists existing token IDs for a later
    `dex lp remove`.
 
+How to find the created addresses:
+
+- `tx status --tx-hash <hash>` reports transaction status, not decoded logs.
+- Open the transaction in BscScan, or inspect `baw wallet tx-history --json`, and
+  read the `TokenCreated` / `GatedPoolCreated` event. The token/pool address is
+  the indexed address field, not the transaction `to` address.
+- `agentswap dex positions --owner <address> --json` lists existing position
+  token IDs; a freshly minted position's tokenId is also in the mint transaction
+  receipt/logs.
+
 If you only want the protocol-level TypeScript walkthrough, use the Agentic
 Protocol quickstart. The CLI is the transaction client; it does not replace event
 indexing or a position dashboard.
@@ -313,7 +391,7 @@ indexing or a position dashboard.
 - `--liquidity` (LP remove): full by default; raw uint128 amount or a percentage such as `50%`. Partial removal requires `--no-burn`.
 - `--min-amount0` / `--min-amount1`: raw base-unit lower bounds. Required for LP add and for any LP remove that includes a decrease; they are encoded into the mint/decrease.
 - `--collect-only` (LP remove): skip decrease and only collect/burn after a decrease has already executed. Use this for recovery; never re-run the original decrease command.
-- `--native-out` (swap): `--token-out` must be `BNB`, `native`, `ETH`, or the `0xEeee…` sentinel. The router swaps to WBNB and unwraps it to BNB. BNB → BNB is rejected.
+- `--native-out` (swap): `--token-out` must be `BNB`, `native`, `ETH`, or the `0xEeee…` sentinel. `ETH` is a legacy alias for BNB on this BSC deployment; WBNB is wrapped BNB, and `unwrapWETH9` unwraps it back to BNB. BNB → BNB is rejected.
 - `--min-out` (swap): minimum output in output-token units; for `--native-out`, BNB units.
 - `--recipient`: output/position recipient; defaults to the Agentic Wallet.
 - **Approvals that need a reset:** the CLI returns the reset preview first. Execute it, then re-run; it will not preview the dependent approve against stale state.

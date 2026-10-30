@@ -8,7 +8,7 @@ const GLOBAL_OPTIONS = `Global options:
 
 const ENVIRONMENT = `Environment:
   AGENTSWAP_RPC_URL        BSC RPC endpoint. Defaults to the address book's rpcUrl (public BSC).
-  AGENTSWAP_STATE_DIR      Optional directory for the local tx journal used by tx status --order-id.`;
+  AGENTSWAP_STATE_DIR      State directory (default ~/.agentswap): tx-journal.json stores preview bindings and execution records. Preview and execute must share it.`;
 
 const WALLET = `Binance Agentic Wallet (non-custodial):
   - Requires the official \`baw\` CLI 1.12.0+ and a connected Agentic Wallet.
@@ -101,10 +101,13 @@ const tokenCreateHelp = `Usage: ${PROGRAM} token create --name <name> --symbol <
 
 Builds AgenticTokenFactory.createToken calldata and previews it through BAW.
 Supply is fixed at 18 decimals and split evenly across recipients (remainder to
-the first). Recipients must be agents or active CUSTODY/PURPOSE facilities.
+the first). Recipients must be agents or active CUSTODY/PURPOSE facilities
+(project token custody or game/escrow utility).
 
-Returns requestId, parsedTx, simulationResult, risks, requireConfirmation, and
-the next execute command. Nothing is sent.`;
+Read preview.requestId, preview.parsedTx, preview.simulationResult,
+preview.risks, and preview.requireConfirmation; preview.nextCommand is the next
+execute command. The metadata URI is stored as-is and is not uploaded, fetched,
+or validated. Nothing is sent.`;
 
 const tokenApproveHelp = `Usage: ${PROGRAM} token approve --token <address> --spender <address> --amount <human>
                             [--json]
@@ -171,7 +174,12 @@ const quoteHelp = `Usage: ${PROGRAM} dex quote --token-in <address> --token-out 
 Read-only quote through AgentswapQuoter with the Binance Agentic Wallet BSC
 address as the simulated caller. Gated output requires that wallet to be an
 eligible agent. With --exact-out, --amount-in is the desired output amount and
-the result is the required input.`;
+the result is the required input.
+
+Examples:
+  ${PROGRAM} dex quote --token-in <in> --token-out <out> --fee 3000 --amount-in 1
+  ${PROGRAM} dex quote --token-in <in> --token-out <out> --fee 3000 --amount-in 1 --exact-out
+  # second command asks for 1 unit of output; it is not 1 unit of input.`;
 
 const swapHelp = `Usage: ${PROGRAM} dex swap --token-in <address|BNB> --token-out <address> --fee <uint24>
                        --amount-in <human> --min-out <human>

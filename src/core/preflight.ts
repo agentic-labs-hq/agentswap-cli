@@ -161,7 +161,7 @@ export async function assertLpRecipientsEligible(
   if (denied.length > 0) {
     throw new CliError(
       "LP_NOT_AGENT",
-      `Gated LP requires an Agent ID (category NONE) for both recipient and payer: ${denied
+      `Gated LP requires an Agent ID for both recipient and payer (neither may be a facility): ${denied
         .map((item) => `${item.role} ${item.account} for token ${item.token}`)
         .join("; ")}.`,
     );

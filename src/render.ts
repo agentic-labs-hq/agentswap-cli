@@ -408,9 +408,17 @@ function renderPositions(data: Json): string {
 }
 
 function renderTxExecute(data: Json): string {
-  const lines = ["tx execute — EXECUTED via Binance Agentic Wallet"];
+  const status = text(data.status);
+  const txHash = text(data.txHash);
+  const headline =
+    status === "PENDING_CONFIRMATION"
+      ? "tx execute — PENDING App confirmation (not yet confirmed)"
+      : txHash !== "—" && txHash !== "null"
+        ? "tx execute — broadcast (not yet confirmed)"
+        : "tx execute — submitted to Binance Agentic Wallet";
+  const lines = [headline];
   lines.push(`Request ID: ${text(data.requestId)}`);
-  lines.push(`Status: ${text(data.status)} | orderId: ${text(data.orderId)} | txHash: ${text(data.txHash)}`);
+  lines.push(`Status: ${status} | orderId: ${text(data.orderId)} | txHash: ${txHash}`);
   if (data.message !== null) lines.push(`Message: ${text(data.message)}`);
   const next = obj(data.next);
   lines.push(`Next: ${text(next.command)}`);
